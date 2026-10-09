@@ -1,0 +1,64 @@
+name: Build Private Chat APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Configure Android Project & Permissions
+        run: |
+          flutter create . --platforms=android --org com.bhavinsuthar.privatechat
+          
+          python3 -c "
+          manifest_path = 'android/app/src/main/AndroidManifest.xml'
+          with open(manifest_path, 'r') as f:
+              content = f.read()
+
+          perms = '''
+              <uses-permission android:name=\"android.permission.INTERNET\"/>
+              <uses-permission android:name=\"android.permission.CAMERA\"/>
+              <uses-permission android:name=\"android.permission.READ_EXTERNAL_STORAGE\"/>
+              <uses-permission android:name=\"android.permission.WRITE_EXTERNAL_STORAGE\"/>
+              <uses-permission android:name=\"android.permission.READ_MEDIA_IMAGES\"/>
+          '''
+          content = content.replace('<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\">', '<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\">' + perms)
+          content = content.replace('android:label=\"private_chat_app\"', 'android:label=\"Private Chat\"')
+          
+          # Allow HTTP traffic if self-hosted
+          content = content.replace('<application', '<application android:usesCleartextTraffic=\"true\"')
+
+          with open(manifest_path, 'w') as f:
+              f.write(content)
+          "
+
+      - name: Get Dependencies
+        run: flutter pub get
+
+      - name: Build Release APK
+        run: flutter build apk --release --dart-define=minSdkVersion=21
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PrivateChat-Release-APK
+          path: build/app/outputs/flutter-apk/app-release.apk
